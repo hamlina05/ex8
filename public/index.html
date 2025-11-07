@@ -4,20 +4,14 @@
   <meta charset="utf-8" />
   <title>World Weather Report - Demo</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 24px auto; padding: 16px; background: #f8f9fa; }
-    h1, h3 { color: #333; }
-    label { display:block; margin-top:10px; font-weight: bold; }
-    input, button { padding:8px; margin-top:5px; width:100%; box-sizing: border-box; }
-    button { cursor:pointer; border:none; border-radius:5px; background:#007bff; color:white; font-size:15px; }
-    button:hover { background:#0056b3; }
-    .record { background:white; border:1px solid #ddd; border-radius:8px; padding:10px 12px; margin-top:10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .record strong { font-size:16px; }
-    .record button { background:#dc3545; color:white; padding:6px 10px; border-radius:4px; float:right; }
-    .record button:hover { background:#a71d2a; }
+    body { font-family: Arial; max-width: 800px; margin: 24px auto; }
+    label { display:block; margin-top:8px; }
+    input, button { padding:8px; }
+    .record { border-bottom:1px solid #ddd; padding:8px 0; }
   </style>
 </head>
 <body>
-  <h1>🌦️ World Weather Report (Frontend Demo)</h1>
+  <h1>World Weather Report (demo)</h1>
 
   <h3>Add Weather Record</h3>
   <div>
@@ -33,71 +27,69 @@
   <div id="list"></div>
 
   <script>
-    // --- Simple Frontend-only Weather Record Manager ---
     const listEl = document.getElementById('list');
-    let records = JSON.parse(localStorage.getItem('weatherRecords') || '[]');
 
-    function saveRecords() {
-      localStorage.setItem('weatherRecords', JSON.stringify(records));
-    }
-
-    function renderList() {
-      listEl.innerHTML = '';
-      if (records.length === 0) {
+    async function fetchList() {
+      listEl.innerHTML = 'Loading...';
+      const res = await fetch('/api/weather');
+      const arr = await res.json();
+      if (!arr.length) {
         listEl.innerHTML = '<p>No records yet</p>';
         return;
       }
-      records.forEach((r, i) => {
+      listEl.innerHTML = '';
+      arr.forEach(r => {
+        const d = new Date(r.recordedAt);
         const html = document.createElement('div');
         html.className = 'record';
         html.innerHTML = `
           <strong>${r.city}${r.country ? ', '+r.country : ''}</strong>
           <div>${r.temperature} °C — ${r.description || ''}</div>
-          <div style="font-size:12px;color:#666">${new Date(r.date).toLocaleString()}</div>
-          <button onclick="deleteRecord(${i})">Delete</button>
+          <div style="font-size:12px;color:#666">${d.toLocaleString()}</div>
+          <button data-id="${r._id}" class="del">Delete</button>
         `;
         listEl.appendChild(html);
       });
+      // attach delete handlers
+      document.querySelectorAll('.del').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const id = e.target.dataset.id;
+          if (!confirm('Delete this record?')) return;
+          await fetch('/api/weather/' + id, { method: 'DELETE' });
+          fetchList();
+        })
+      })
     }
 
-    function deleteRecord(i) {
-      if (!confirm('Delete this record?')) return;
-      records.splice(i, 1);
-      saveRecords();
-      renderList();
-    }
+    document.getElementById('refreshBtn').addEventListener('click', fetchList);
 
-    document.getElementById('addBtn').addEventListener('click', () => {
+    document.getElementById('addBtn').addEventListener('click', async () => {
       const city = document.getElementById('city').value.trim();
       const country = document.getElementById('country').value.trim();
       const temperature = Number(document.getElementById('temp').value);
       const description = document.getElementById('desc').value.trim();
 
-      if (!city || isNaN(temperature)) {
-        alert('City and temperature required');
-        return;
-      }
+      if (!city || isNaN(temperature)) return alert('City and temperature required');
 
-      records.push({
-        city,
-        country,
-        temperature,
-        description,
-        date: new Date().toISOString()
+      const res = await fetch('/api/weather', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ city, country, temperature, description })
       });
-
-      saveRecords();
-      document.getElementById('city').value = '';
-      document.getElementById('country').value = '';
-      document.getElementById('temp').value = '';
-      document.getElementById('desc').value = '';
-      renderList();
+      if (res.ok) {
+        document.getElementById('city').value='';
+        document.getElementById('country').value='';
+        document.getElementById('temp').value='';
+        document.getElementById('desc').value='';
+        fetchList();
+      } else {
+        const err = await res.json();
+        alert('Error: ' + (err.error || 'unknown'));
+      }
     });
 
-    document.getElementById('refreshBtn').addEventListener('click', renderList);
-
-    // Initial load
-    renderList();
+    // initial loadgit add index.html
+    fetchList();
   </script>
 </body>
 </html>
